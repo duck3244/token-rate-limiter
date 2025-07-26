@@ -1,0 +1,224 @@
+# application-dev.yml - 개발 환경 설정
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  profiles:
+    active: dev
+    
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2000ms
+        shutdown-timeout: 100ms
+      # 개발 환경에서는 Redis 연결 실패 시 무시
+      client-type: lettuce
+  
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: true
+    deserialization:
+      fail-on-unknown-properties: false
+
+# 토큰 사용량 제한 설정 (개발 환경 - 관대한 제한)
+token:
+  rate-limit:
+    enabled: true
+    models:
+      llama2-7b:
+        max-tokens-per-minute: 5000      # 개발 시 여유롭게
+        max-tokens-per-hour: 50000
+        max-tokens-per-day: 500000
+        max-concurrent-requests: 20
+      llama2-13b:
+        max-tokens-per-minute: 3000
+        max-tokens-per-hour: 30000
+        max-tokens-per-day: 300000
+        max-concurrent-requests: 15
+      gpt-3.5-turbo:
+        max-tokens-per-minute: 4000
+        max-tokens-per-hour: 40000
+        max-tokens-per-day: 400000
+        max-concurrent-requests: 10
+      gpt-4:
+        max-tokens-per-minute: 2000
+        max-tokens-per-hour: 20000
+        max-tokens-per-day: 200000
+        max-concurrent-requests: 5
+      # 테스트용 모델
+      test-model:
+        max-tokens-per-minute: 10000
+        max-tokens-per-hour: 100000
+        max-tokens-per-day: 1000000
+        max-concurrent-requests: 50
+
+# vLLM 서비스 엔드포인트 (개발 환경)
+vllm:
+  services:
+    llama2-7b: ${VLLM_LLAMA7B_URL:http://localhost:8001}
+    llama2-13b: ${VLLM_LLAMA13B_URL:http://localhost:8002}
+    gpt-3.5-turbo: ${VLLM_GPT35_URL:http://localhost:8003}
+    gpt-4: ${VLLM_GPT4_URL:http://localhost:8004}
+    test-model: ${VLLM_TEST_URL:http://localhost:8005}
+  # 개발 환경에서는 더 짧은 타임아웃
+  connection-timeout: 5000ms
+  read-timeout: 30000ms
+  retry:
+    max-attempts: 2
+    backoff-delay: 1000ms
+
+# 액추에이터 설정 (개발 환경 - 모든 엔드포인트 노출)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+      base-path: /actuator
+      cors:
+        allowed-origins: "*"
+        allowed-methods: "*"
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    env:
+      show-values: when_authorized
+    configprops:
+      show-values: when_authorized
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+    loggers:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 10s
+    tags:
+      application: ${spring.application.name}
+      environment: dev
+      version: ${app.version:dev}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+
+# 로깅 설정
+logging:
+  level:
+    root: INFO
+    com.example.tokenratelimiter: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.data.redis: DEBUG
+    io.lettuce.core: INFO
+    reactor.netty: INFO
+    io.micrometer: INFO
+  pattern:
+    console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/token-rate-limiter-dev.log
+    max-size: 10MB
+    max-history: 5
+    total-size-cap: 50MB
+
+# 개발 도구 설정
+debug: false
+trace: false
+
+# 커스텀 개발 설정
+app:
+  name: token-rate-limiter
+  version: ${project.version:dev-snapshot}
+  environment: development
+  build-time: ${maven.build.timestamp:unknown}
+  
+  # 개발 환경 특정 설정
+  dev:
+    # 개발 시 더 자세한 에러 메시지
+    show-error-details: true
+    # 개발 시 CORS 완전 허용
+    cors:
+      enabled: true
+      allowed-origins: "*"
+      allowed-methods: "*"
+      allowed-headers: "*"
+    # 개발 시 Redis 실패 시 Fallback 모드
+    fallback-mode:
+      enabled: true
+      in-memory-cache: true
+    # 개발 시 더 빠른 스케줄링
+    scheduling:
+      cleanup-interval: 300000  # 5분
+      stats-interval: 60000     # 1분
+      health-check-interval: 30000  # 30초
+
+# WebFlux 설정 (개발 환경)
+spring.webflux:
+  base-path: /
+  static-path-pattern: /static/**
+
+# 개발 환경 보안 설정 (완화된 설정)
+security:
+  # 개발 시에는 더 관대한 CORS 정책
+  cors:
+    allowed-origins: 
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+      - "http://127.0.0.1:3000"
+      - "http://127.0.0.1:8080"
+    allowed-methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allowed-headers: ["*"]
+    allow-credentials: true
+  
+  # JWT 설정 (개발용)
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-key-for-development-only-not-for-production}
+    expiration: 86400000  # 24시간 (개발 시 길게)
+    
+  # API Key 설정
+  api-key:
+    header-name: X-API-Key
+    default-key: ${API_KEY:dev-api-key-12345}
+
+# 개발 환경 데이터베이스 설정 (H2 인메모리 - 필요시)
+# spring:
+#   h2:
+#     console:
+#       enabled: true
+#       path: /h2-console
+#   datasource:
+#     url: jdbc:h2:mem:devdb
+#     driver-class-name: org.h2.Driver
+#     username: sa
+#     password: 
+#   jpa:
+#     hibernate:
+#       ddl-auto: create-drop
+#     show-sql: true
+
+# 개발 환경 프로파일링
+spring.jmx:
+  enabled: true
+
+# 개발 도구
+spring.devtools:
+  restart:
+    enabled: true
+    additional-paths: src/main/resources
+  livereload:
+    enabled: true

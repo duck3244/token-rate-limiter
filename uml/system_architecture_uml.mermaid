@@ -1,0 +1,66 @@
+graph TB
+    %% 외부 클라이언트
+    Client[Client Applications<br/>📱 Mobile/Web Apps]
+    
+    %% API Gateway/Load Balancer
+    LB[Load Balancer<br/>⚖️ Kubernetes Service]
+    
+    %% Token Rate Limiter 서비스들
+    subgraph "Token Rate Limiter Pods"
+        TRL1[Token Rate Limiter Pod 1<br/>🛡️ Spring Boot WebFlux]
+        TRL2[Token Rate Limiter Pod 2<br/>🛡️ Spring Boot WebFlux]
+        TRL3[Token Rate Limiter Pod 3<br/>🛡️ Spring Boot WebFlux]
+    end
+    
+    %% Redis Cache
+    Redis[(Redis Cluster<br/>💾 Token Usage Cache)]
+    
+    %% vLLM Model Servers
+    subgraph "vLLM Model Servers"
+        Model1[Llama2-7B Service<br/>🤖 vLLM Server]
+        Model2[Llama2-13B Service<br/>🤖 vLLM Server]
+        Model3[GPT-3.5 Service<br/>🤖 vLLM Server]
+        Model4[GPT-4 Service<br/>🤖 vLLM Server]
+    end
+    
+    %% 모니터링 시스템
+    subgraph "Monitoring Stack"
+        Prometheus[Prometheus<br/>📊 Metrics Collection]
+        Grafana[Grafana<br/>📈 Dashboard]
+        AlertManager[Alert Manager<br/>🚨 Alerting]
+    end
+    
+    %% 연결 관계
+    Client --> LB
+    LB --> TRL1
+    LB --> TRL2
+    LB --> TRL3
+    
+    TRL1 --> Redis
+    TRL2 --> Redis
+    TRL3 --> Redis
+    
+    TRL1 --> Model1
+    TRL1 --> Model2
+    TRL2 --> Model3
+    TRL3 --> Model4
+    
+    TRL1 --> Prometheus
+    TRL2 --> Prometheus
+    TRL3 --> Prometheus
+    
+    Prometheus --> Grafana
+    Prometheus --> AlertManager
+    
+    %% 스타일링
+    classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef serviceStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef dataStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef modelStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef monitorStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    class Client clientStyle
+    class LB,TRL1,TRL2,TRL3 serviceStyle
+    class Redis dataStyle
+    class Model1,Model2,Model3,Model4 modelStyle
+    class Prometheus,Grafana,AlertManager monitorStyle

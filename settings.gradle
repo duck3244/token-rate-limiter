@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
+}
+
+rootProject.name = 'token-rate-limiter'
+
+// 멀티 모듈 프로젝트로 확장할 경우 사용
+// include 'token-limiter-core'
+// include 'token-limiter-web'
+// include 'token-limiter-monitoring'

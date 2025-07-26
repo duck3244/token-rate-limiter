@@ -1,0 +1,97 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: token-rate-limiter
+  
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+  
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+# 토큰 사용량 제한 설정
+token:
+  rate-limit:
+    models:
+      gpt-3.5-turbo:
+        max-tokens-per-minute: 1000
+        max-tokens-per-hour: 10000
+        max-tokens-per-day: 100000
+        max-concurrent-requests: 5
+      gpt-4:
+        max-tokens-per-minute: 500
+        max-tokens-per-hour: 5000
+        max-tokens-per-day: 50000
+        max-concurrent-requests: 3
+      llama2-7b:
+        max-tokens-per-minute: 2000
+        max-tokens-per-hour: 20000
+        max-tokens-per-day: 200000
+        max-concurrent-requests: 10
+      llama2-13b:
+        max-tokens-per-minute: 1500
+        max-tokens-per-hour: 15000
+        max-tokens-per-day: 150000
+        max-concurrent-requests: 8
+
+# vLLM 서비스 엔드포인트 설정
+vllm:
+  services:
+    gpt-3.5-turbo: ${VLLM_GPT35_URL:http://vllm-gpt35-service:8000}
+    gpt-4: ${VLLM_GPT4_URL:http://vllm-gpt4-service:8000}
+    llama2-7b: ${VLLM_LLAMA7B_URL:http://vllm-llama2-7b-service:8000}
+    llama2-13b: ${VLLM_LLAMA13B_URL:http://vllm-llama2-13b-service:8000}
+
+# 액추에이터 설정
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:development}
+
+# 로깅 설정
+logging:
+  level:
+    com.example.tokenratelimiter: ${LOG_LEVEL:INFO}
+    org.springframework.data.redis: WARN
+    io.lettuce: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/token-rate-limiter.log
+    max-size: 100MB
+    max-history: 30
+
+# 커스텀 설정
+app:
+  version: @project.version@
+  build-time: @maven.build.timestamp@

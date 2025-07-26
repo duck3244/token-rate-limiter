@@ -1,0 +1,110 @@
+graph TB
+    %% 외부 인터페이스
+    subgraph "External Interface"
+        API[REST API<br/>📡 /api/v1/models]
+        Admin[Admin API<br/>⚙️ /api/v1/admin]
+        Actuator[Actuator<br/>🏥 /actuator]
+    end
+    
+    %% 웹 계층
+    subgraph "Web Layer"
+        Filter[TokenRateLimitFilter<br/>🛡️ Request Filtering]
+        Router[ModelProxyRouter<br/>🔀 Request Routing]
+        Controller[TokenUsageController<br/>📊 Admin Operations]
+        ExceptionHandler[GlobalExceptionHandler<br/>⚠️ Error Handling]
+    end
+    
+    %% 서비스 계층
+    subgraph "Service Layer"
+        RateLimitService[TokenRateLimitService<br/>🚦 Rate Limiting Logic]
+        ProxyService[ModelProxyService<br/>🔄 Model Proxy]
+        RegistryService[ModelRegistryService<br/>📋 Model Registry]
+    end
+    
+    %% 데이터 계층
+    subgraph "Data Layer"
+        RedisConfig[RedisConfig<br/>⚙️ Redis Configuration]
+        RedisTemplate[RedisTemplate<br/>💾 Data Access]
+    end
+    
+    %% 모니터링 계층
+    subgraph "Monitoring Layer"
+        Metrics[TokenUsageMetrics<br/>📈 Metrics Collection]
+        ScheduledTasks[ScheduledTasks<br/>⏰ Background Jobs]
+    end
+    
+    %% 설정 계층
+    subgraph "Configuration Layer"
+        RateLimitConfig[TokenRateLimitConfig<br/>⚙️ Rate Limit Settings]
+        WebConfig[WebConfig<br/>🌐 Web Configuration]
+    end
+    
+    %% 외부 시스템
+    subgraph "External Systems"
+        Redis[(Redis<br/>💾 Cache)]
+        vLLM1[vLLM Llama2-7B<br/>🤖 Model Server]
+        vLLM2[vLLM Llama2-13B<br/>🤖 Model Server]
+        vLLM3[vLLM GPT-3.5<br/>🤖 Model Server]
+        Prometheus[Prometheus<br/>📊 Metrics Storage]
+    end
+    
+    %% 연결 관계 - 외부에서 웹 계층으로
+    API --> Filter
+    API --> Router
+    Admin --> Controller
+    Actuator --> Metrics
+    
+    %% 웹 계층 내부 연결
+    Filter --> Router
+    Router --> ExceptionHandler
+    Controller --> ExceptionHandler
+    
+    %% 웹 계층에서 서비스 계층으로
+    Filter --> RateLimitService
+    Router --> ProxyService
+    Controller --> RateLimitService
+    
+    %% 서비스 계층 내부 연결
+    ProxyService --> RateLimitService
+    ProxyService --> RegistryService
+    
+    %% 서비스 계층에서 데이터 계층으로
+    RateLimitService --> RedisTemplate
+    RegistryService --> RedisTemplate
+    
+    %% 데이터 계층에서 외부 시스템으로
+    RedisTemplate --> Redis
+    
+    %% 서비스 계층에서 외부 모델 서버로
+    ProxyService --> vLLM1
+    ProxyService --> vLLM2
+    ProxyService --> vLLM3
+    
+    %% 모니터링 연결
+    RateLimitService --> Metrics
+    ProxyService --> Metrics
+    Metrics --> Prometheus
+    ScheduledTasks --> RedisTemplate
+    ScheduledTasks --> Metrics
+    
+    %% 설정 연결
+    RateLimitConfig --> RateLimitService
+    WebConfig --> Router
+    RedisConfig --> RedisTemplate
+    
+    %% 스타일링
+    classDef webStyle fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef serviceStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef dataStyle fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef monitorStyle fill:#fff8e1,stroke:#f57c00,stroke-width:2px
+    classDef configStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef externalStyle fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    classDef interfaceStyle fill:#f1f8e9,stroke:#689f38,stroke-width:2px
+    
+    class Filter,Router,Controller,ExceptionHandler webStyle
+    class RateLimitService,ProxyService,RegistryService serviceStyle
+    class RedisConfig,RedisTemplate dataStyle
+    class Metrics,ScheduledTasks monitorStyle
+    class RateLimitConfig,WebConfig configStyle
+    class Redis,vLLM1,vLLM2,vLLM3,Prometheus externalStyle
+    class API,Admin,Actuator interfaceStyle

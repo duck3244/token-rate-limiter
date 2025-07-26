@@ -1,0 +1,318 @@
+# application-prod.yml - 프로덕션 환경 설정
+server:
+  port: 8080
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/xml,text/css,text/javascript
+  http2:
+    enabled: true
+
+spring:
+  profiles:
+    active: prod
+    
+  data:
+    redis:
+      host: ${REDIS_HOST:redis-service}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 3000ms
+        shutdown-timeout: 200ms
+        cluster:
+          refresh:
+            adaptive: true
+            period: 30s
+      # 프로덕션에서는 Sentinel 또는 Cluster 모드 고려
+      sentinel:
+        master: ${REDIS_SENTINEL_MASTER:mymaster}
+        nodes: ${REDIS_SENTINEL_NODES:sentinel1:26379,sentinel2:26379,sentinel3:26379}
+      ssl: ${REDIS_SSL:false}
+      
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: false  # 프로덕션에서는 압축을 위해 false
+    deserialization:
+      fail-on-unknown-properties: false
+
+# 토큰 사용량 제한 설정 (프로덕션 환경 - 엄격한 제한)
+token:
+  rate-limit:
+    enabled: true
+    models:
+      llama2-7b:
+        max-tokens-per-minute: 2000
+        max-tokens-per-hour: 20000
+        max-tokens-per-day: 200000
+        max-concurrent-requests: 10
+      llama2-13b:
+        max-tokens-per-minute: 1500
+        max-tokens-per-hour: 15000
+        max-tokens-per-day: 150000
+        max-concurrent-requests: 8
+      gpt-3.5-turbo:
+        max-tokens-per-minute: 1000
+        max-tokens-per-hour: 10000
+        max-tokens-per-day: 100000
+        max-concurrent-requests: 5
+      gpt-4:
+        max-tokens-per-minute: 500
+        max-tokens-per-hour: 5000
+        max-tokens-per-day: 50000
+        max-concurrent-requests: 3
+    # 프로덕션 환경 특별 설정
+    circuit-breaker:
+      enabled: true
+      failure-threshold: 5
+      recovery-timeout: 60000ms
+    fallback:
+      enabled: true
+      default-response: "서비스가 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요."
+
+# vLLM 서비스 엔드포인트 (프로덕션 환경)
+vllm:
+  services:
+    llama2-7b: ${VLLM_LLAMA7B_URL:http://vllm-llama2-7b-service:8000}
+    llama2-13b: ${VLLM_LLAMA13B_URL:http://vllm-llama2-13b-service:8000}
+    gpt-3.5-turbo: ${VLLM_GPT35_URL:http://vllm-gpt35-service:8000}
+    gpt-4: ${VLLM_GPT4_URL:http://vllm-gpt4-service:8000}
+  # 프로덕션 환경에서는 더 긴 타임아웃
+  connection-timeout: 10000ms
+  read-timeout: 60000ms
+  retry:
+    max-attempts: 3
+    backoff-delay: 2000ms
+    multiplier: 2.0
+  # 연결 풀 설정
+  connection-pool:
+    max-connections: 100
+    max-connections-per-route: 20
+    connection-request-timeout: 5000ms
+    socket-timeout: 30000ms
+
+# 액추에이터 설정 (프로덕션 환경 - 보안 강화)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      show-components: when_authorized
+      roles: ADMIN
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 30s
+        pushgateway:
+          enabled: false
+    tags:
+      application: ${spring.application.name}
+      environment: production
+      version: ${app.version}
+      instance: ${HOSTNAME:unknown}
+      region: ${AWS_REGION:unknown}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      sla:
+        http.server.requests: 10ms,50ms,100ms,200ms,500ms,1s,2s
+
+# 로깅 설정 (프로덕션)
+logging:
+  level:
+    root: WARN
+    com.example.tokenratelimiter: INFO
+    org.springframework.web: WARN
+    org.springframework.data.redis: WARN
+    io.lettuce.core: WARN
+    reactor.netty: WARN
+    io.micrometer: WARN
+    # 보안 관련 로그는 더 상세히
+    org.springframework.security: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId:-},%X{spanId:-}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId:-},%X{spanId:-}] %logger{36} - %msg%n"
+  file:
+    name: /var/log/token-rate-limiter/application.log
+    max-size: 100MB
+    max-history: 30
+    total-size-cap: 3GB
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+
+# 프로덕션 환경 설정
+debug: false
+trace: false
+
+# 커스텀 프로덕션 설정
+app:
+  name: token-rate-limiter
+  version: ${project.version:1.0.0}
+  environment: production
+  build-time: ${maven.build.timestamp}
+  
+  # 프로덕션 환경 특정 설정
+  prod:
+    # 프로덕션에서는 에러 상세 정보 숨김
+    show-error-details: false
+    # CORS 엄격한 설정
+    cors:
+      enabled: true
+      allowed-origins: ${ALLOWED_ORIGINS:https://api.example.com,https://app.example.com}
+      allowed-methods: ["GET", "POST", "PUT", "DELETE"]
+      allowed-headers: ["Content-Type", "Authorization", "X-API-Key", "X-User-ID"]
+      allow-credentials: true
+    # Redis 실패 시 Fallback 비활성화 (알람으로 처리)
+    fallback-mode:
+      enabled: false
+    # 프로덕션 스케줄링 간격
+    scheduling:
+      cleanup-interval: 3600000   # 1시간
+      stats-interval: 300000      # 5분
+      health-check-interval: 60000 # 1분
+    # 알람 설정
+    alerting:
+      enabled: true
+      slack-webhook: ${SLACK_WEBHOOK_URL}
+      email-alerts: ${ALERT_EMAIL_ADDRESSES}
+
+# 보안 설정 (프로덕션)
+security:
+  # CORS 엄격한 설정
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS}
+    allowed-methods: ["GET", "POST", "PUT", "DELETE"]
+    allowed-headers: ["Content-Type", "Authorization", "X-API-Key", "X-User-ID"]
+    allow-credentials: true
+    max-age: 3600
+  
+  # JWT 설정
+  jwt:
+    secret: ${JWT_SECRET}  # 환경 변수로만 설정
+    expiration: 3600000    # 1시간 (프로덕션에서는 짧게)
+    issuer: ${JWT_ISSUER:token-rate-limiter}
+    
+  # API Key 설정
+  api-key:
+    header-name: X-API-Key
+    validation-enabled: true
+    
+  # Rate Limiting 보안
+  rate-limit:
+    # IP 기반 추가 제한
+    ip-based:
+      enabled: true
+      requests-per-minute: 1000
+      requests-per-hour: 10000
+    # Suspicious activity 감지
+    anomaly-detection:
+      enabled: true
+      threshold-multiplier: 5.0
+
+# JVM 및 성능 설정
+spring.jmx:
+  enabled: true
+  default-domain: token-rate-limiter
+
+# 프로덕션 WebFlux 설정
+spring.webflux:
+  base-path: /
+  # 큰 요청 처리를 위한 설정
+  multipart:
+    max-in-memory-size: 1MB
+    max-disk-usage-per-part: 10MB
+    max-parts: 128
+
+# 프로덕션 환경 리소스 설정
+spring.task:
+  execution:
+    pool:
+      core-size: 8
+      max-size: 16
+      queue-capacity: 100
+  scheduling:
+    pool:
+      size: 4
+
+# 캐시 설정 (프로덕션)
+spring.cache:
+  type: redis
+  redis:
+    time-to-live: 600000ms  # 10분
+    cache-null-values: false
+
+# 프로덕션 모니터링
+monitoring:
+  enabled: true
+  # APM 설정
+  apm:
+    enabled: ${APM_ENABLED:false}
+    service-name: token-rate-limiter
+    environment: production
+  # 분산 추적
+  tracing:
+    enabled: ${TRACING_ENABLED:true}
+    sampling-rate: 0.1  # 10% 샘플링
+  # 커스텀 메트릭
+  custom-metrics:
+    enabled: true
+    jvm-metrics: true
+    system-metrics: true
+    tomcat-metrics: true
+
+# 장애 조치 설정
+resilience:
+  circuit-breaker:
+    enabled: true
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60000ms
+        permitted-number-of-calls-in-half-open-state: 3
+  retry:
+    enabled: true
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 1000ms
+        exponential-backoff-multiplier: 2
+  timeout:
+    enabled: true
+    configs:
+      default:
+        timeout-duration: 5000ms
+
+# 프로덕션 배치 작업 설정
+batch:
+  cleanup:
+    enabled: true
+    cron: "0 0 2 * * ?"  # 매일 새벽 2시
+  statistics:
+    enabled: true
+    cron: "0 */15 * * * ?"  # 15분마다
+  health-check:
+    enabled: true
+    cron: "0 */5 * * * ?"   # 5분마다

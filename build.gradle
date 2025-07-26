@@ -1,0 +1,170 @@
+plugins {
+    id 'org.springframework.boot' version '3.2.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'java'
+    id 'jacoco'
+    id 'com.palantir.docker' version '0.35.0'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = '17'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot WebFlux
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    
+    // Spring Boot Data Redis Reactive
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+    
+    // Spring Boot Actuator
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    
+    // Spring Boot Configuration Processor
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    
+    // Micrometer Prometheus
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    
+    // Jackson
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    
+    // JWT 라이브러리 (선택사항)
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+    
+    // 테스트 의존성
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:redis'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.testcontainers:testcontainers-bom:1.19.3"
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = false
+        csv.required = false
+        html.outputLocation = layout.buildDirectory.dir('jacocoHtml')
+    }
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+// Docker 설정
+docker {
+    name "${project.name}:${project.version}"
+    dockerfile file('Dockerfile')
+    files bootJar.archiveFile.get()
+}
+
+// 개발 환경 실행 태스크
+task runDev(type: JavaExec) {
+    group = 'application'
+    description = 'Run the application with dev profile'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.example.tokenratelimiter.TokenRateLimiterApplication'
+    systemProperty 'spring.profiles.active', 'dev'
+}
+
+// 프로덕션 환경 실행 태스크
+task runProd(type: JavaExec) {
+    group = 'application'
+    description = 'Run the application with prod profile'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.example.tokenratelimiter.TokenRateLimiterApplication'
+    systemProperty 'spring.profiles.active', 'prod'
+}
+
+// 통합 테스트 태스크
+task integrationTest(type: Test) {
+    group = 'verification'
+    description = 'Run integration tests'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    
+    useJUnitPlatform {
+        includeTags 'integration'
+    }
+    
+    shouldRunAfter test
+}
+
+// 코드 품질 체크
+task checkQuality {
+    group = 'verification'
+    description = 'Run all quality checks'
+    dependsOn check, jacocoTestCoverageVerification
+}
+
+// Docker 이미지 빌드 및 푸시
+task dockerBuildAndPush {
+    group = 'docker'
+    description = 'Build and push Docker image'
+    dependsOn docker
+    doLast {
+        exec {
+            commandLine 'docker', 'push', "${project.name}:${project.version}"
+        }
+    }
+}
+
+// 클린업 태스크
+task cleanAll {
+    group = 'build'
+    description = 'Clean all build artifacts including Docker images'
+    dependsOn clean
+    doLast {
+        exec {
+            commandLine 'docker', 'rmi', "${project.name}:${project.version}"
+            ignoreExitValue true
+        }
+    }
+}
+
+// Gradle Wrapper 설정
+wrapper {
+    gradleVersion = '8.5'
+    distributionType = Wrapper.DistributionType.BIN
+}
