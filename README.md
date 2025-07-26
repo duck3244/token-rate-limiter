@@ -8,19 +8,6 @@
 [![Redis](https://img.shields.io/badge/Redis-7.0-red)](https://redis.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## 📋 목차
-
-- [개요](#-개요)
-- [주요 기능](#-주요-기능)
-- [시스템 아키텍처](#-시스템-아키텍처)
-- [빠른 시작](#-빠른-시작)
-- [API 사용법](#-api-사용법)
-- [설정](#-설정)
-- [개발 환경](#-개발-환경)
-- [모니터링](#-모니터링)
-- [배포](#-배포)
-- [기여하기](#-기여하기)
-
 ## 🎯 개요
 
 Simple Token Limiter는 **Llama 3.2 1B 모델**을 위한 전용 토큰 사용량 제한 서비스입니다. 
