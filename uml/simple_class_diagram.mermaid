@@ -1,0 +1,87 @@
+classDiagram
+    %% Configuration Classes
+    class TokenLimitConfig {
+        -int maxTokensPerMinute
+        -int maxTokensPerHour
+        -int maxTokensPerDay
+        -int maxConcurrentRequests
+        -String modelName
+        -String vllmUrl
+        +getters()
+        +setters()
+    }
+
+    %% Model Classes
+    class TokenUsage {
+        -String userId
+        -int tokensUsed
+        -LocalDateTime timestamp
+        -String requestId
+        +TokenUsage()
+        +getters()
+        +setters()
+    }
+
+    %% Service Classes
+    class TokenLimitService {
+        -ReactiveRedisTemplate redisTemplate
+        -TokenLimitConfig config
+        +checkTokenLimit(userId, tokens) Mono~Boolean~
+        +recordTokenUsage(userId, tokens, requestId) Mono~Void~
+        +getCurrentTokenUsage(userId) Mono~Map~
+        -checkConcurrentRequests() Mono~Boolean~
+        -updateTokenUsageWindow() Mono~Void~
+    }
+
+    class LlamaProxyService {
+        -WebClient webClient
+        -TokenLimitService tokenLimitService
+        -TokenLimitConfig config
+        +proxyToLlama(requestBody, userId) Mono~String~
+        +checkHealth() Mono~Boolean~
+        +getAvailableModels() Mono~String~
+        -estimateTokensFromRequest() int
+        -extractTokenUsageFromResponse() int
+    }
+
+    %% Controller
+    class LlamaController {
+        -LlamaProxyService llamaProxyService
+        -TokenLimitService tokenLimitService
+        +chatCompletions(requestBody, userId) Mono~ResponseEntity~
+        +getModels() Mono~ResponseEntity~
+        +getHealth() Mono~ResponseEntity~
+        +getTokenUsage(userId) Mono~ResponseEntity~
+    }
+
+    %% Exception Classes
+    class TokenLimitExceededException {
+        -int retryAfter
+        -String limitType
+        +getRetryAfter() int
+        +getLimitType() String
+    }
+
+    class ModelServiceException {
+        +ModelServiceException(message)
+    }
+
+    %% Exception Handler
+    class GlobalExceptionHandler {
+        +handleTokenLimitExceeded() Mono~ResponseEntity~
+        +handleModelServiceException() Mono~ResponseEntity~
+        +handleGenericException() Mono~ResponseEntity~
+    }
+
+    %% Relationships
+    TokenLimitService --> TokenLimitConfig : uses
+    TokenLimitService --> TokenUsage : creates
+    LlamaProxyService --> TokenLimitService : uses
+    LlamaProxyService --> TokenLimitConfig : uses
+    LlamaController --> LlamaProxyService : uses
+    LlamaController --> TokenLimitService : uses
+    
+    TokenLimitService ..> TokenLimitExceededException : throws
+    LlamaProxyService ..> ModelServiceException : throws
+    GlobalExceptionHandler --> TokenLimitExceededException : handles
+    GlobalExceptionHandler --> ModelServiceException : handles

@@ -1,0 +1,58 @@
+sequenceDiagram
+    participant Client as 📱 Client
+    participant Controller as 🎮 LlamaController
+    participant TokenService as 🛡️ TokenLimitService
+    participant Redis as 💾 Redis
+    participant ProxyService as 🔄 LlamaProxyService
+    participant vLLM as 🤖 vLLM Llama 3.2
+
+    Note over Client,vLLM: Chat Completion Request Flow
+
+    Client->>+Controller: POST /api/v1/chat/completions
+    Note right of Client: X-User-ID: user123<br/>Request Body: messages
+
+    Controller->>+ProxyService: proxyToLlama(requestBody, userId)
+    
+    ProxyService->>ProxyService: estimateTokensFromRequest()
+    Note right of ProxyService: Estimate ~100 tokens
+
+    ProxyService->>+TokenService: checkTokenLimit(userId, 100)
+    
+    TokenService->>+Redis: GET concurrent:user123
+    Redis-->>-TokenService: current: 2
+    
+    TokenService->>+Redis: GET token:usage:user123:minute
+    Redis-->>-TokenService: usage: 500
+    
+    TokenService->>TokenService: validate limits
+    Note right of TokenService: minute: 500/1000 ✓<br/>concurrent: 2/5 ✓
+    
+    TokenService->>+Redis: INCR concurrent:user123
+    Redis-->>-TokenService: new count: 3
+    
+    TokenService-->>-ProxyService: ✅ allowed
+    
+    ProxyService->>+vLLM: POST /v1/chat/completions
+    Note right of vLLM: Process with Llama 3.2 1B
+    vLLM-->>-ProxyService: response + usage info
+    
+    ProxyService->>ProxyService: extractTokenUsageFromResponse()
+    Note right of ProxyService: Actual: 85 tokens
+    
+    ProxyService->>+TokenService: recordTokenUsage(userId, 85, requestId)
+    
+    TokenService->>+Redis: INCRBY token:usage:user123:minute 85
+    Redis-->>-TokenService: updated: 585
+    
+    TokenService->>+Redis: INCRBY token:usage:user123:hour 85
+    Redis-->>-TokenService: updated: 2150
+    
+    TokenService->>+Redis: DECR concurrent:user123
+    Redis-->>-TokenService: updated: 2
+    
+    TokenService-->>-ProxyService: ✅ recorded
+    
+    ProxyService-->>-Controller: response
+    Controller-->>-Client: 200 OK + model response
+
+    Note over Client,vLLM: Flow Complete - 85 tokens consumed

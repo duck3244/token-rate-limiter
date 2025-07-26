@@ -4,7 +4,7 @@ server:
 
 spring:
   application:
-    name: token-rate-limiter
+    name: simple-token-limiter
   
   data:
     redis:
@@ -15,44 +15,21 @@ spring:
         pool:
           max-active: 8
           max-idle: 8
-          min-idle: 0
-          max-wait: -1ms
+          min-idle: 2
+          max-wait: 2000ms
   
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
-# 토큰 사용량 제한 설정
+# 토큰 제한 설정 (Llama 3.2 1B 전용)
 token:
-  rate-limit:
-    models:
-      gpt-3.5-turbo:
-        max-tokens-per-minute: 1000
-        max-tokens-per-hour: 10000
-        max-tokens-per-day: 100000
-        max-concurrent-requests: 5
-      gpt-4:
-        max-tokens-per-minute: 500
-        max-tokens-per-hour: 5000
-        max-tokens-per-day: 50000
-        max-concurrent-requests: 3
-      llama2-7b:
-        max-tokens-per-minute: 2000
-        max-tokens-per-hour: 20000
-        max-tokens-per-day: 200000
-        max-concurrent-requests: 10
-      llama2-13b:
-        max-tokens-per-minute: 1500
-        max-tokens-per-hour: 15000
-        max-tokens-per-day: 150000
-        max-concurrent-requests: 8
-
-# vLLM 서비스 엔드포인트 설정
-vllm:
-  services:
-    gpt-3.5-turbo: ${VLLM_GPT35_URL:http://vllm-gpt35-service:8000}
-    gpt-4: ${VLLM_GPT4_URL:http://vllm-gpt4-service:8000}
-    llama2-7b: ${VLLM_LLAMA7B_URL:http://vllm-llama2-7b-service:8000}
-    llama2-13b: ${VLLM_LLAMA13B_URL:http://vllm-llama2-13b-service:8000}
+  limit:
+    model-name: llama3.2-1b
+    vllm-url: ${VLLM_URL:http://localhost:8000}
+    max-tokens-per-minute: ${MAX_TOKENS_MINUTE:1000}
+    max-tokens-per-hour: ${MAX_TOKENS_HOUR:10000}
+    max-tokens-per-day: ${MAX_TOKENS_DAY:100000}
+    max-concurrent-requests: ${MAX_CONCURRENT:5}
 
 # 액추에이터 설정
 management:
@@ -64,15 +41,12 @@ management:
   endpoint:
     health:
       show-details: always
-      show-components: always
+  # Spring Boot 3.x 새로운 prometheus 설정 방식
+  prometheus:
     metrics:
-      enabled: true
-    prometheus:
-      enabled: true
-  metrics:
-    export:
-      prometheus:
+      export:
         enabled: true
+  metrics:
     tags:
       application: ${spring.application.name}
       environment: ${ENVIRONMENT:development}
@@ -80,18 +54,8 @@ management:
 # 로깅 설정
 logging:
   level:
-    com.example.tokenratelimiter: ${LOG_LEVEL:INFO}
+    com.example.simpletokenlimiter: ${LOG_LEVEL:INFO}
     org.springframework.data.redis: WARN
     io.lettuce: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-  file:
-    name: logs/token-rate-limiter.log
-    max-size: 100MB
-    max-history: 30
-
-# 커스텀 설정
-app:
-  version: @project.version@
-  build-time: @maven.build.timestamp@

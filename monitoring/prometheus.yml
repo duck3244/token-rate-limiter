@@ -1,0 +1,26 @@
+# Prometheus 설정
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+
+scrape_configs:
+  # Simple Token Limiter 메트릭 수집
+  - job_name: 'simple-token-limiter'
+    static_configs:
+      - targets: ['token-limiter:8080']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 30s
+
+  # Redis 메트릭 (redis_exporter 사용 시)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Prometheus 자체 모니터링
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

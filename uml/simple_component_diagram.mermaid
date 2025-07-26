@@ -1,0 +1,64 @@
+graph TB
+    %% Input/Output
+    subgraph "External Interface"
+        API[🌐 REST API<br/>Port 8080]
+        Monitor[📊 Monitoring<br/>/actuator/*]
+    end
+    
+    %% Core Components
+    subgraph "Core Components"
+        Controller[🎮 LlamaController<br/>chat/completions<br/>models<br/>health<br/>usage]
+        
+        TokenLimit[🛡️ TokenLimitService<br/>checkTokenLimit<br/>recordTokenUsage<br/>getCurrentUsage]
+        
+        Proxy[🔄 LlamaProxyService<br/>proxyToLlama<br/>checkHealth<br/>getAvailableModels]
+    end
+    
+    %% Configuration
+    subgraph "Configuration"
+        Config[⚙️ TokenLimitConfig<br/>Max tokens settings<br/>vLLM URL config]
+        
+        RedisConfig[🔧 RedisConfig<br/>Connection settings<br/>Template setup]
+        
+        WebConfig[🌐 WebConfig<br/>WebClient builder<br/>HTTP settings]
+    end
+    
+    %% External Dependencies
+    subgraph "External Systems"
+        Redis[(💾 Redis<br/>Token counters<br/>Usage tracking<br/>TTL management)]
+        
+        vLLM[🤖 vLLM Server<br/>Llama 3.2 1B<br/>Chat completions<br/>Token counting]
+    end
+    
+    %% Exception Handling
+    subgraph "Error Handling"
+        ExHandler[⚠️ GlobalExceptionHandler<br/>Rate limit errors<br/>Service errors<br/>Generic errors]
+        
+        Exceptions[📋 Exception Classes<br/>TokenLimitExceededException<br/>ModelServiceException]
+    end
+    
+    %% Background Tasks
+    subgraph "Background Tasks"
+        Scheduler[⏰ ScheduledTasks<br/>Cleanup expired keys<br/>Health checks<br/>Daily stats]
+    end
+    
+    %% Connections
+    API --> Controller
+    Monitor --> Controller
+    
+    Controller --> TokenLimit
+    Controller --> Proxy
+    Controller --> ExHandler
+    
+    Proxy --> TokenLimit
+    Proxy --> vLLM
+    
+    TokenLimit --> Redis
+    TokenLimit --> Config
+    
+    Proxy --> Config
+    Controller --> WebConfig
+    TokenLimit --> RedisConfig
+    
+    ExHandler --> Exceptions
+    Scheduler --> Redis

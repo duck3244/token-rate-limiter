@@ -1,0 +1,98 @@
+# Simple Token Limiter Docker Compose
+version: '3.8'
+
+services:
+  # Redis 캐시
+  redis:
+    image: redis:7-alpine
+    container_name: simple-token-limiter-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - token-limiter-network
+
+  # Simple Token Limiter 서비스
+  token-limiter:
+    build: .
+    container_name: simple-token-limiter
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - VLLM_URL=http://vllm-llama:8000
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - token-limiter-network
+    restart: unless-stopped
+
+  # vLLM Llama 3.2 1B 서버
+  vllm-llama:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-llama3.2-1b
+    ports:
+      - "8000:8000"
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model meta-llama/Llama-3.2-1B-Instruct
+      --host 0.0.0.0
+      --port 8000
+      --tensor-parallel-size 1
+      --max-model-len 2048
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - model_cache:/root/.cache/huggingface
+    networks:
+      - token-limiter-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Prometheus (모니터링)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: simple-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - token-limiter-network
+
+volumes:
+  redis_data:
+  model_cache:
+  prometheus_data:
+
+networks:
+  token-limiter-network:
+    driver: bridge

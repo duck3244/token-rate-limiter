@@ -1,0 +1,59 @@
+graph TB
+    %% External
+    Client[📱 Client Applications<br/>Mobile/Web/API]
+    
+    %% Main Service
+    subgraph "Simple Token Limiter Service"
+        Controller[🎮 LlamaController<br/>REST API Endpoints]
+        TokenService[🛡️ TokenLimitService<br/>Rate Limiting Logic]
+        ProxyService[🔄 LlamaProxyService<br/>vLLM Proxy]
+        Config[⚙️ TokenLimitConfig<br/>Rate Limits Settings]
+    end
+    
+    %% External Services
+    Redis[(💾 Redis<br/>Token Usage Cache)]
+    vLLM[🤖 vLLM Server<br/>Llama 3.2 1B Model]
+    
+    %% Monitoring
+    subgraph "Monitoring"
+        Prometheus[📊 Prometheus<br/>Metrics Collection]
+        Health[💊 Health Checks<br/>Service Status]
+    end
+    
+    %% Flow
+    Client --> Controller
+    Controller --> ProxyService
+    Controller --> TokenService
+    ProxyService --> TokenService
+    ProxyService --> vLLM
+    TokenService --> Redis
+    TokenService --> Config
+    ProxyService --> Config
+    
+    %% Monitoring
+    Controller --> Prometheus
+    TokenService --> Prometheus
+    ProxyService --> Health
+    
+    %% API Endpoints
+    Controller -.-> |"POST /api/v1/chat/completions"| Client
+    Controller -.-> |"GET /api/v1/models"| Client  
+    Controller -.-> |"GET /api/v1/health"| Client
+    Controller -.-> |"GET /api/v1/usage/{userId}"| Client
+    
+    %% Rate Limiting Flow
+    TokenService -.-> |"Check Limits"| Redis
+    TokenService -.-> |"Record Usage"| Redis
+    
+    %% Styling
+    classDef clientStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef serviceStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef dataStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef externalStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef monitorStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    class Client clientStyle
+    class Controller,TokenService,ProxyService,Config serviceStyle
+    class Redis dataStyle
+    class vLLM externalStyle
+    class Prometheus,Health monitorStyle
